@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Mario Kart: Double Sats</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'JetBrains Mono', monospace;
+        overflow-y:hidden;
+        overflow-x:hidden;
+      }
+      @font-face {
+        font-family:'nes';
+         src: url('fonts/nes.woff') format('woff');
+      }
+      .mono {
+        font-family:'nes';
+      }
+      .marioText {
+        font-family:"New Super Mario Font U";
+        font-size: 43px;
+        line-height:40px;
+        padding-top:6px;
+        letter-spacing:-2px;
+        -webkit-text-stroke: .7px #111; 
+      }
+      .mario {
+        font-family:"New Super Mario Font U";
+        font-size: 43px;
+        line-height:55px;
+        font-weight: bold;
+        /* Peach Beach colors */
+        /* background: linear-gradient(to bottom,#fff0f5,#ff1493); */
+
+        background: linear-gradient(90deg, red, orange, yellow, #00c800);
+
+        /* pretty rainbow
+        background: linear-gradient(90deg, #ff3366, #ff9933, #ffff66, #66ff66, #3399ff, #cc66ff); */
+
+        /* yellow to orange gradient */
+        /* background: linear-gradient(to bottom,
+          #fff700 0%,
+          #ffc800 50%,
+          #ff6a00 80%,
+          #ff2200 100%
+        ); */
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing:-2px;
+        -webkit-text-stroke: 1px #111; 
+      }
+      .award {
+        font-family:"New Super Mario Font U";
+        font-size: 48px;
+        font-weight: bold;
+        /* Peach Beach colors */
+        background: linear-gradient(to bottom,#fff0f5,#ff1493);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing:-2.5px;
+        -webkit-text-stroke: 1.2px #111; 
+      }
+      .fade {
+        position:absolute;
+        top:105px;
+        right:12px;
+        transition-property: opacity;
+        transition-duration: 600ms;
+        transition-timing-function: ease-in-out;
+        opacity: 1;
+      }
+      .fade.hidden {
+        opacity: 0;
+        transition-duration: 600ms;
+      }
+      .player-box {
+        display:none;
+        font-family:nes;
+        font-size:10px;
+        line-height:22.2px;
+        /* font-family: 'JetBrains Mono', monospace; */
+        position: relative;
+        width:395px;
+        height:94px;
+        margin-left:7.5px;
+        margin-bottom: 30px;
+        border-radius: 10px;
+        background-color: #0e2450;
+        background-image: url(''), url('background.png');
+        background-repeat: no-repeat, repeat; 
+        background-size:50px, 400px;
+        background-position: 97% 25%, 0% 0%;
+        box-shadow:
+          0 0 0 8px #00aaff,      
+          inset 0 0 0 4px black;  
+        overflow: visible; /* so the tab can stick out */
+        color: #fff;
+      }
+      .player-box.p1 {
+        box-shadow:
+          0 0 0 6px #ff3232,
+          inset 0 0 0 4px black;
+      }
+      .player-box.p2 {
+        box-shadow:
+          0 0 0 6px #006aff,
+          inset 0 0 0 4px black;
+      }
+      .player-box.p3 {
+        box-shadow:
+          0 0 0 6px #00c800,
+          inset 0 0 0 4px black;
+      }
+      .player-box.p4 {
+        box-shadow:
+          0 0 0 6px #ffc800,
+          inset 0 0 0 4px black;
+      }
+      .player-tab {
+        position: absolute;
+        top: -14px;
+        left: 20px;
+        width: 45px;
+        height: 28px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: black;
+        clip-path: polygon(0 0, 100% 0, 100% 70%, 82% 100%, 0 100%);
+      }
+      .player-tab.p1 {
+        background: #ff3232;
+      }
+      .player-tab.p2 {
+        background: #006aff;
+      }
+      .player-tab.p3 {
+        background: #00c800;
+      }
+      .player-tab.p4 {
+        background: #ffc800;
+      }
+      .player-box-content {
+        position: absolute;
+        top: 0; left: 0; bottom: 0; right: 0;
+        padding: 19px 15px 18px 15px;
+        display: block;
+      }
+      #game-buttons {
+        z-index:1;
+        position:absolute;
+        bottom:110px;
+        left:460px;
+        font-size:20px;
+      }
+      #game-buttons button {
+        padding:5px 6px;
+        background:#faf6f1;
+        border-radius:3px;
+        border:2px solid black;
+      }
+      #register-user {
+        width:250px;
+        font-family: "Fredoka";
+        font-weight:700;
+        line-height:36px; 
+        z-index:1;
+        position:absolute;
+        /* this is for when we have lightning registration, not manual background */
+        /* top:675px; */ 
+        top:665px;
+        left:794px;
+        font-size:18px;
+        text-align:center;
+      }
+      #register-user-inner {
+        letter-spacing:.3px; /* comment out for manual registration */
+        padding:20px;
+        border:3px solid black;
+        border-radius:10px;
+        background:#faf6f1;
+      }
+      #register-user input, select {
+        width:calc(100% - 8px);
+        text-align:center;
+        font-size:16px;
+        border:1px solid black;
+        border-radius:3px;
+        padding:4px 3px;
+      }
+      select {
+        width:100%;
+      }
+      button {
+        font-family: "Fredoka";
+        font-weight:500;
+        text-transform:uppercase;
+        text-align:center;
+      }
+      #register-user button {
+        width:100%;
+        font-size:16px;
+        margin-top:6px;
+        border-radius:3px;
+        border:1px solid black;
+        padding:5px 0px;
+        cursor:pointer;
+      }
+      #console { 
+        white-space: pre;
+        position:absolute;
+        bottom:77px;
+        right: 9px;
+        width:375px;
+        overflow: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        height: 203px;
+        margin-top:15px;
+        background-color: #001a00;
+        color: #a8e200;
+        font-family:nes;
+        font-size:9.5px;
+        line-height:18px;
+        padding: 16px;
+        overflow-y: auto;
+        border-radius:12px;
+        overflow: auto; 
+        scrollbar-width: none; 
+        -ms-overflow-style: none;
+        overflow-y: auto; 
+        white-space: pre-wrap; 
+      }
+      #console-inner {
+        overflow: auto; 
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        overflow-y: auto; 
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+  <div id="top-letterbox"    style="position:absolute; width:100%; top:0; left: 0; height:67.5px; background-color:black"></div>
+  <div id="bottom-letterbox" style="position:absolute; width:100%; bottom:0; left: 0; height:67.5px; background-color:black"></div>
+  <!-- mario kart konsole -->
+  <div id="console">>> Mario Kart Console 1.0<br></div>
+  </div> 
+
+  <div id="register" style="position:absolute; left:0; top:0">
+    <!-- register manually with a keyboard -->
+    <img src="manual-registration.png" style="width: 1172px; margin:67.7px 0px">
+    <!-- register over the lightning network -->
+    <!-- <img src="register-lightning.jpg" style="width: 1172px; margin:67.7px 0px"> -->
+  </div> <!-- register -->
+
+  <!-- User registration -->
+  <div id="register-user">
+    <div id="register-user-inner">
+    PLAYER REGISTRATION<br>
+    <!-- MANUAL REGISTRATION<br> -->
+    <select id="user-number">
+      <option value="" disable selected>Choose Player</option>
+      <option value="1">Player 1</option>
+      <option value="2">Player 2</option>
+      <option value="3">Player 3</option>
+      <option value="4">Player 4</option>
+    </select>
+    <input type=text id="user-name" placeholder="Name (optional)"></input><br>
+    <input type=text id="user-address" placeholder="Lightning Address"></input><br>
+    <button onclick="submitUser()">Submit</button>
+    </div>
+  </div>
+
+  <!-- Game buttons -->
+  <div id="game-buttons">
+    <!-- <button onclick="startGame()">Start Game</button>
+    <button onclick="stopGame()">Stop Game</button> -->
+  </div>
+  
+  <div id="visuals" style="position:absolute; width:406px; padding-left:10px; padding-right:12px; padding-top:10px; right:0; top:67.5px;">
+
+    <div style="text-align:center; padding-left:10px"><img id="game-logo" src="logos/double-sats-ln.png" width=330px style="padding-top:16px"></div>
+    <!-- <div style="text-align:center"><img id="game-logo" src="logos/double-sats.png" width=300px style="padding-top:10px"></div> -->
+    
+    <div id="game-display" style="margin-top:-10px">
+      <div id="loading" class="fade hidden" style="text-align:center; width:95.5%">
+        <img id="loading-icon" src="logos/title-screen.png" style="text-align:center; padding-top:26px;">
+      </div>
+      <div id="game-info" class="fade hidden" style="text-align:center; width:95.5%;">
+        <div><img id="course-logo" width=230px style="padding-left:10px;padding-top:30px;"></div>
+        <div id="mode" class="marioText" style="padding:15px"></div>
+      </div> <!-- game info -->
+    </div> <!-- game-display -->
+
+    <div id="spacer" style="margin-top:-10px"></div>
+
+    <!-- Player 1 Box -->
+    <div class="player-box p1">
+      <div class="player-tab p1">P1</div>
+      <div class="player-box-content"></div>
+    </div>
+
+    <!-- Player 2 Box -->
+    <div class="player-box p2">
+      <div class="player-tab p2">P2</div>
+      <div class="player-box-content"></div>
+    </div>
+      
+    <!-- Player 3 Box -->
+    <div class="player-box p3">
+      <div class="player-tab p3">P3</div>
+      <div class="player-box-content"></div>
+    </div>
+
+    <!-- Player 4 Box -->
+    <div class="player-box p4">
+      <div class="player-tab p4">P4</div>
+      <div class="player-box-content"></div>
+    </div>
+
+    <!-- <h1>Game Status</h1> -->
+    <!-- <pre id="state"></pre> -->
+  </div> <!-- visuals -->
+
+</body>
+</html>
+
+<script>
+let game, courseName = "", prevCourse = "", mode;
+
+function updatePlayerText(player, playerDiv) {
+  let name = player.custom_name || player.name;
+  playerDiv.empty();
+  playerDiv.append(`<strong>${name}</strong>`);
+  playerDiv.append(`<br>Sats earned: ${player.sats_earned}
+                    <br>${player.lightning_address || "No Address Specified"}`);
+}
+
+function updatePlayers() {
+  for (i = 0; i < game.players.length; i++) {
+    let player = game.players[i];
+    if (player.position == 255 && player.name == "Player 2" && game.game_mode_players == 2 && game.game_mode == "Grand Prix") {
+      // case for two player grand prix award ceremony, don't want to hide data for player 2 even though their position is 255
+      continue;
+    }
+    if (!player.active || player.position == 255) {
+      $(`.player-box.p${i+1}`).hide();
+      continue;
+    }
+    // a fix to make sure we get the accurate number of players in grand prix mode
+    if (game.game_mode == "Grand Prix") {
+      if ((game.game_mode_players == 1 && i > 0) || (game.game_mode_players == 2 && i > 1)) {
+        $(`.player-box.p${i+1}`).hide();
+        continue;
+      }
+    }
+    updatePlayerText(player, $(`.player-box.p${i+1} .player-box-content`));
+    updatePositionImage(player, $(`.player-box.p${i+1}`));
+    $(`.player-box.p${i+1}`).show();
+  }
+}
+
+function updatePositionImage(player, playerBox) {
+  let overlayUrl = "none";
+  if (player.position != 255 && game.current_course != "Title Screen" && game.current_course != "Award Ceremony") {
+    // todo: need a special case for the award ceremony where it calculates the player's place based off of scores
+    overlayUrl = `url('logos/place/${player.position}.png')`;
+  }
+  const backgroundImages = playerBox.css('background-image').split(',');
+  backgroundImages[0] = overlayUrl;
+  playerBox.css('background-image', backgroundImages.join(','));
+}
+
+function toOrdinal(n) {
+  const s = ["th", "st", "nd", "rd"]
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
+}
+
+function updateLogos() {
+  courseName = game.current_course;
+  mode = game.game_mode;
+
+  if (prevCourse == courseName || prevCourse.includes("All Cup Tour") && courseName.includes("All Cup Tour"))
+    return;
+
+  if (courseName == "Title Screen") {
+    $('#game-info.fade').addClass('hidden');
+    $('#loading.fade').removeClass('hidden');
+  }
+  else {
+    $('#loading.fade').addClass('hidden');
+
+    let courseLogoTag = $('#course-logo');
+    let courseLogo = courseName.split(" ").join("-").toLowerCase();
+    if (prevCourse != "Title Screen") { // this allows the grand prix images to seamlessly fade in and out, grand prix 
+                                       // doesn't show the title screen in between courses, but vs. does
+      // for grand prix behavior
+      $('#game-info.fade').addClass('hidden');
+      $('#mode').css('opacity', '1');
+    }
+    // if it's grand prix, ideally dont fade out the game mode and player stuff bc that's not changing
+    // you can know this because the game mode will be gp
+    // if it's vs, do fade out the game mode and player stuff
+
+    if (courseLogo.includes("all-cup-tour")) {
+      courseLogo = "all-cup-tour";
+      courseLogoTag.css("width", "130px");
+      courseLogoTag.css("margin-bottom", "-8px");
+    }
+    else {
+      courseLogoTag.css("width", "230px");
+      courseLogoTag.css("margin-bottom", "0px");
+    }
+
+    // this is the correct action for vs, at least for now!
+    setTimeout(() => {
+      courseLogoTag.attr('src', `logos/${courseLogo}.webp`).one('load', function() {
+        $('#game-info.fade').removeClass('hidden');
+      });
+    }, 600);
+  }
+  prevCourse = courseName;
+}
+
+function appendContent(content) {
+  const scrollDiv = $('#console');
+  scrollDiv.append(`${content}`);
+  scrollDiv.stop().animate({ scrollTop: scrollDiv[0].scrollHeight }, 300);
+}
+
+function updateVisuals(numPlayers) {
+  numPlayers < 4 ? $('#game-display').show() : $('#game-display').hide();
+
+  if (numPlayers == 3) {
+    $('#mode').hide();
+    $('#loading-icon').css('width', '175px');
+    $('#loading-icon').css('padding-top', '23px');
+    $('#spacer').css('height', '170px');
+    $('#console').css('height', '180px');
+  }
+  else {
+    $('#mode').show();
+    $('#loading-icon').css('width', '300px');
+    $('#loading-icon').css('padding-top', '26px');
+    $('#spacer').css('height', '270px');
+    $('#console').css('height', '203px');
+  }
+
+  if (numPlayers == 1) {
+    $('#console').css('height', '330px');
+  }
+  if(numPlayers == 4) {
+    $('#spacer').css('height', '24px');
+  }
+}
+
+function marioText(input, div) {
+  const colors = ['#ff0000', '#ffcc00', '#0072ff', '#00aa00']; // red, yellow, blue, green
+  const text = input.split('');
+  let html = '';
+  let colorCounter = 0;
+
+  for (let i = 0; i < text.length; i++) {
+    let color = text[i] === ' ' ? 'inherit' : colors[colorCounter++ % colors.length];
+    html += `<span style="color:${color}; font-weight:bold;">${text[i]}</span>`;
+  }
+
+  html = html.split('*');
+  html = `${html[0]}<br>${html[1]}`; 
+ 
+  div.html(html);
+}
+
+function submitUser() {
+  let name = $('#user-name').val();
+  let address = $('#user-address').val();
+  let number = $('#user-number').val();
+  
+  if (!number) {
+    appendContent("<br>Please select a player to update.<br>");
+    return;
+  } 
+  number = `Player ${number}`;
+  if (!address) {
+    appendContent(`<br>Please enter a Lightning Address for ${number}.<br>`);
+    return;
+  }
+  if (!address.includes("@")) {
+    address += "@walletofsatoshi.com";
+    // appendContent(`<br>There was an issue with the lightning address ${address} for ${number}.<br>`);
+    // return;
+  }
+  sendMessage({ type: "register", name, address, number });
+  appendContent(`<br>Updated info for ${number}!<br>`);
+}
+
+function updateState() {
+  $.getJSON("/api/state", function(data) {
+    game = data;
+    $('#state').text(JSON.stringify(data, null, 2));
+    let course = game.current_course;
+    let cup = game.current_cup;
+    let gameMode = game.game_mode;
+    let numPlayers;
+    console.log(course);
+
+    if (gameMode == "Grand Prix")
+      numPlayers = game.game_mode_players;
+    else
+      numPlayers = game.num_players;
+
+    updateVisuals(numPlayers);
+    updateLogos();
+    updatePlayers();
+    marioText(`${cup} *${numPlayers} Player ${gameMode}`, $('#mode'));
+  });
+}
+
+setInterval(updateState, 500); // update every half second
+
+let socket; 
+
+function connect() {
+  socket = new WebSocket('ws://127.0.0.1:8765');
+
+  socket.onmessage = function(event) {
+    console.log('WebSocket message:', event.data);
+    appendContent(`<br>${event.data}<br>`);
+  };
+
+  socket.onclose = () => setTimeout(connect, 1000);
+}
+
+connect();
+
+function sendMessage(json) {
+  json = JSON.stringify(json);
+  if (socket.readyState === WebSocket.OPEN) {
+    socket.send(json);
+  } else {
+    alert("Websocket not open yet. Could not send message.");
+  }
+}
+
+</script>
