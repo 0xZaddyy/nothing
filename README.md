@@ -11,15 +11,15 @@
 
 ## Setup
 
-1. Clone this repo and navigate into the project folder.
+1. Launch the Dolphin emulator and start Double Dash.
+   
+2. Clone this repo and navigate into the project folder.
 
-2. Set the required environment variables for LND:
+3. Set the required environment variables for LND:
    - `GRPC_HOST`: your LND gRPC endpoint (e.g. `localhost:10009`)
    - `ADMIN_MACAROON`: hex-encoded string of your admin macaroon
    - Optionally, put your TLS cert in the root directory as `tls.cert`
-
-3. Launch the Dolphin emulator and start Double Dash.
-   
+  
 4. Start the server:
    ```bash
    python mario.py
