@@ -17,13 +17,13 @@
    - `GRPC_HOST`: your LND gRPC endpoint (e.g. `localhost:10009`)
    - `ADMIN_MACAROON`: hex-encoded string of your admin macaroon
    - Optionally, put your TLS cert in the root directory as `tls.cert`
+
+3. Launch the Dolphin emulator and start Double Dash.
    
-3. Start the server:
+4. Start the server:
    ```bash
    python mario.py
    
-4. Open http://localhost:5000 in your browser and switch to full screen.
-
-5. Launch the Dolphin emulator and start Double Dash.
+5. Open http://localhost:5000 in your browser and switch to full screen.
 
 6. Run the AutoHotKey script, select the game window, and press Ctrl + M to snap it over the UI.
