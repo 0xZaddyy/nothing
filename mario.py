@@ -566,7 +566,7 @@ def game_loop(player):
             # sleeps .5 seconds between loops and pays every 3rd time (course_timer % 3)
             # but i could change it to actual time to be more accurate
             message = f"{game.current_course_emoji} You're in first place in {game.current_course}! {game.current_course_emoji_bonus}"
-            # can add bitcoin facts for each message, perhaps supplied by 4o??
+            # can add bitcoin facts for each message - perhaps supplied by 4o??
             # \n works on both ZBD and WoS
             # message += "\n\nDid you know that there are 100 million satoshis per bitcoin?"
             pay_player(player, game.stream_amount, message)
