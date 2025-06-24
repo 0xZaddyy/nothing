@@ -11,6 +11,7 @@ import time
 import os
 import grpc
 import codecs
+from urllib.parse import urlencode
 import lightning_pb2 as lnrpc
 import lightning_pb2_grpc as lightningrpc
 
@@ -90,6 +91,7 @@ class Player:
 
 @dataclass
 class Game:
+    use_phoenixd: bool = True
     offline: bool = False
     payments: bool = True
     started: bool = False # after it's true, don't allow for new registrations
@@ -181,30 +183,68 @@ game.players.append(player3)
 game.players.append(player4)
 
 # start LND stuff ##########################################################
-grpc_host = os.getenv("GRPC_HOST")
-tls_path = 'tls.cert'
-admin_macaroon = codecs.encode(bytes.fromhex(os.getenv("ADMIN_MACAROON")), 'hex')
+if not game.use_phoenixd:
+    grpc_host = os.getenv("GRPC_HOST_URL")
+    tls_path = 'tls.cert'
+    admin_macaroon = codecs.encode(bytes.fromhex(os.getenv("ADMIN_MACAROON")), 'hex')
 
-def metadata_callback(context, callback):
-    callback([('macaroon', admin_macaroon)], None)
+    def metadata_callback(context, callback):
+        callback([('macaroon', admin_macaroon)], None)
 
-auth_creds = grpc.metadata_call_credentials(metadata_callback)
-
-def lnd_connect():
-    global client
     auth_creds = grpc.metadata_call_credentials(metadata_callback)
-    os.environ['GRPC_SSL_CIPHER_SUITES'] = 'HIGH+ECDSA'
-    cert = None
-    if tls_path and os.path.exists(tls_path):
-        with open(tls_path, 'rb') as file:
-            cert = file.read()
-    ssl_creds = grpc.ssl_channel_credentials(cert)
-    combined_creds = grpc.composite_channel_credentials(ssl_creds, auth_creds)
-    channel = grpc.secure_channel(grpc_host, combined_creds)
-    client = lightningrpc.LightningStub(channel)
 
-lnd_connect()
+    def lnd_connect():
+        global client
+        auth_creds = grpc.metadata_call_credentials(metadata_callback)
+        os.environ['GRPC_SSL_CIPHER_SUITES'] = 'HIGH+ECDSA'
+        cert = None
+        if tls_path and os.path.exists(tls_path):
+            with open(tls_path, 'rb') as file:
+                cert = file.read()
+        ssl_creds = grpc.ssl_channel_credentials(cert)
+        combined_creds = grpc.composite_channel_credentials(ssl_creds, auth_creds)
+        channel = grpc.secure_channel(grpc_host, combined_creds)
+        client = lightningrpc.LightningStub(channel)
+
+    lnd_connect()
 # end LND stuff ############################################################
+
+# start phoenixd stuff #####################################################
+if game.use_phoenixd:
+    def pay_player_phoenixd(player, amount, message):
+        address = player.lightning_address
+        try:
+            data = {
+            'address': address,
+            'amountSat': amount,
+            'message': message
+            }
+
+            headers = {
+            'Content-Type': 'application/x-www-form-urlencoded'
+            }
+
+            auth = (os.getenv('PHOENIXD_HTTP_USER'), os.getenv('PHOENIXD_HTTP_PASSWORD'))
+
+            response = requests.post(
+            f"{os.getenv('PHOENIXD_HOST_URL')}/paylnaddress",
+                data=urlencode(data),
+                headers=headers,
+                auth=auth
+            )
+
+            response.raise_for_status()
+            print('Invoice created:', response.json())
+            return response.json()
+
+        except requests.exceptions.RequestException as error:
+            if error.response:
+                print(error.response.text)
+                return error.response.text
+            else:
+                print(str(error))
+                return str(error)
+# end phoenixd stuff #######################################################
 
 # start websockets stuff ###################################################
 ws_server = WebsocketServer(host='127.0.0.1', port=8765)
@@ -304,7 +344,7 @@ def send_message(message, print_message=True):
     if print_message:
         print(message)
 
-def pay_player(player, amount, comment, print_message=True):
+def pay_player_lnd(player, amount, comment, print_message=True):
     if not game.payments:
         return
     
@@ -329,7 +369,7 @@ def pay_player(player, amount, comment, print_message=True):
             return
         
         short_invoice = f"{invoice[:19]}..{invoice[-18:]}"
-        send_message(f"got {amount} sat invoice for {player.name}:<br>{short_invoice}")
+        send_message(f"Fetched <font style='font-size:2px'> </font><span class='b'>B</span><font style='font-size:2.5px'> </font>{amount} invoice for {player.name}:<br>{short_invoice}")
 
     except Exception as error:
         send_message(f"There was an issue retrieving the invoice: {error}")
@@ -345,7 +385,7 @@ def pay_player(player, amount, comment, print_message=True):
         total_fees_msat = data.payment_route.total_fees_msat
         num_hops = len(data.payment_route.hops)
 
-        send_message(f"Payment successful for {player.name}!<br>{short_preimage}<br>{amount} sat{s} | Fee: {total_fees_msat} msats | Hops: {num_hops}", False)
+        send_message(f"Payment successful for {player.name}!<br>{short_preimage}<br>Amount: <font style='font-size:5px'></font><span class='b'>B</span><font style='font-size:2.5px'> </font>{amount} | Fee: <font style='font-size:2px'> </font><span class='b'>B</span><font style='font-size:2.5px'> </font>{total_fees_msat/1000} | Hops: {num_hops}", False)
         
     except Exception as error:
         send_message(f"There was an error paying the invoice: {error}")
@@ -551,14 +591,29 @@ def game_loop(player):
         if player.position == 1: # they're in first place
             if player.lap == game.current_course_laps: # they completed the course in first place
                 message = f"🥇 {game.current_course} completed! {game.current_course_emoji} You finished in first place! {game.current_course_emoji_bonus}"
-                pay_player(player, game.course_amount, message) # to do: add player's name if they added it
+                if game.use_phoenixd:
+                    pay_player_phoenixd(player, game.course_amount, message)
+                else:
+                    pay_player(player, game.course_amount, message) # to do: add player's name if they added it
+
                 game.course_over = True # stop paying players until the next course starts
             else:
                 message = f"Lap {player.lap} complete! {game.current_course_emoji} You're in the lead on {game.current_course} and are now on lap {player.lap + 1}. {game.current_course_emoji_bonus}" # the '&' breaks ZBD
-                pay_player(player, game.lap_amount, message)
+                if game.use_phoenixd:
+                    pay_player_phoenixd(player, game.lap_amount, message)
+                else:
+                    pay_player(player, game.lap_amount, message)
 
     # stream sats to player in first position
+    # phoenixd - got 20 payments in luigi circuit (not including lap and course bonuses, definitely slower...)
+    # will see how it speeds up with the persistent http connection!!
+
+
+    # phoenixd luigi circuit to phoenix wallet - 7 first lap
+    # phoenixd peach beach to wallet of satoshi - 19 first lap (14 second time)
+
     # expecting about 30 - 33 stream payments (luigi circuit was 30, peach beach 33, dk mountain 33 (including multple falls))
+    # 35 payments with new python code! (152 sats in luigi circuit)
     elif player.position == 1 and game.course_timer % 3 == 0 and game.course_timer > 0: # pay every three cycles
         # it's not a new lap but they're in first so pay them the streaming amount!
         if (game.game_mode == "Grand Prix" and game.course_timer > game.gp_wait_time or game.game_mode == "Vs." and game.course_timer > game.vs_wait_time):
@@ -569,7 +624,11 @@ def game_loop(player):
             # can add bitcoin facts for each message - perhaps supplied by 4o??
             # \n works on both ZBD and WoS
             # message += "\n\nDid you know that there are 100 million satoshis per bitcoin?"
-            pay_player(player, game.stream_amount, message)
+            if game.use_phoenixd:
+                pay_player_phoenixd(player, game.stream_amount, message)
+            else:
+                pay_player(player, game.stream_amount, message)
+            
         else:
             print("game hasn't started yet")
         
@@ -581,7 +640,8 @@ def insert_player(address, name, custom_name):
     player = next((p for p in game.players if p.name == name), None)
     player.custom_name = custom_name
     player.lightning_address = address
-    get_callback(player)
+    if not game.use_phoenixd:
+        get_callback(player) 
     player.sats_earned = 0
 
 def start_here():
