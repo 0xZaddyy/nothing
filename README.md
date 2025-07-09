@@ -6,6 +6,7 @@
 
 ## Requirements
 
+- Windows or Linux (MacOS is _not supported_)
 - [Dolphin emulator](https://dolphin-emu.org/download/)
 - A copy of the [*Mario Kart: Double Dash* ROM](https://romsfun.com/download/mario-kart-double-dash-27533/6)
 
