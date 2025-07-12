@@ -91,7 +91,7 @@ class Player:
 
 @dataclass
 class Game:
-    use_phoenixd: bool = False
+    funding_source: str = os.getenv("FUNDING_SOURCE", "lnd").lower()
     offline: bool = False
     payments: bool = True
     started: bool = False # after it's true, don't allow for new registrations
@@ -183,7 +183,7 @@ game.players.append(player3)
 game.players.append(player4)
 
 # start LND stuff ##########################################################
-if not game.use_phoenixd:
+if game.funding_source == "lnd":
     grpc_host = os.getenv("GRPC_HOST_URL")
     tls_path = 'tls.cert'
     admin_macaroon = codecs.encode(bytes.fromhex(os.getenv("ADMIN_MACAROON")), 'hex')
@@ -210,7 +210,7 @@ if not game.use_phoenixd:
 # end LND stuff ############################################################
 
 # start phoenixd stuff #####################################################
-if game.use_phoenixd:
+if game.funding_source == "phoenixd":
     def pay_player_phoenixd(player, amount, message):
         address = player.lightning_address
         try:
@@ -369,7 +369,13 @@ def send_message(message, print_message=True):
     if print_message:
         print(message)
 
-def pay_player_lnd(player, amount, comment, print_message=True):
+def pay_player(player, amount, comment):
+    if game.funding_source == "lnd":
+        pay_player_lnd(player, amount, comment)
+    if game.funding_source == "phoenixd":
+        pay_player_phoenixd(player, amount, comment)
+
+def pay_player_lnd(player, amount, comment):
     if not game.payments:
         return
     
@@ -380,8 +386,7 @@ def pay_player_lnd(player, amount, comment, print_message=True):
     player.sats_earned += amount
     amount_msat = amount * 1000 # convert to millisats - danger! be careful here!!!
 
-    if print_message:
-        print(comment)
+    print(comment)
 
     try:
         # todo: check if it's a json string and if so, parse it to json
@@ -615,18 +620,13 @@ def game_loop(player):
         if player.position == 1: # they're in first place
             if player.lap == game.current_course_laps: # they completed the course in first place
                 message = f"🥇 {game.current_course} completed! {game.current_course_emoji} You finished in first place! {game.current_course_emoji_bonus}"
-                if game.use_phoenixd:
-                    pay_player_phoenixd(player, game.course_amount, message)
-                else:
-                    pay_player_lnd(player, game.course_amount, message) # to do: add player's name if they added it
+                pay_player(player, game.course_amount, message)
 
                 game.course_over = True # stop paying players until the next course starts
             else:
                 message = f"Lap {player.lap} complete! {game.current_course_emoji} You're in the lead on {game.current_course} and are now on lap {player.lap + 1}. {game.current_course_emoji_bonus}" # the '&' breaks ZBD
-                if game.use_phoenixd:
-                    pay_player_phoenixd(player, game.lap_amount, message)
-                else:
-                    pay_player_lnd(player, game.lap_amount, message)
+                pay_player(player, game.lap_amount, message)
+
 
     # stream sats to player in first position
     # phoenixd - got 20 payments in luigi circuit (not including lap and course bonuses, definitely slower...)
@@ -648,10 +648,7 @@ def game_loop(player):
             # can add bitcoin facts for each message - perhaps supplied by 4o??
             # \n works on both ZBD and WoS
             # message += "\n\nDid you know that there are 100 million satoshis per bitcoin?"
-            if game.use_phoenixd:
-                pay_player_phoenixd(player, game.stream_amount, message)
-            else:
-                pay_player_lnd(player, game.stream_amount, message)
+            pay_player(player, game.stream_amount, message)
             
         else:
             print("game hasn't started yet")
@@ -664,7 +661,7 @@ def insert_player(address, name, custom_name):
     player = next((p for p in game.players if p.name == name), None)
     player.custom_name = custom_name
     player.lightning_address = address
-    if not game.use_phoenixd:
+    if game.funding_source == "lnd":
         get_callback(player) 
     player.sats_earned = 0
 
