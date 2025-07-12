@@ -8,8 +8,10 @@
 
 - Windows or Linux (MacOS is _not supported_)
 - [Dolphin emulator](https://dolphin-emu.org/download/)
-- A copy of the [*Mario Kart: Double Dash* ROM](https://romsfun.com/download/mario-kart-double-dash-27533/6)
+- A copy of the [*Mario Kart: Double Dash* ROM](https://romsfun.com/download/mario-kart-double-dash-27533/6)*
 - LND or Phoenixd
+
+*\* Important: Make sure you're using the USA version of the ROM, which should be exactly 377 MB. If you use a different version, the game will not work!*
 
 ## Setup
 
