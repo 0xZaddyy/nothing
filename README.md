@@ -9,6 +9,7 @@
 - Windows or Linux (MacOS is _not supported_)
 - [Dolphin emulator](https://dolphin-emu.org/download/)
 - A copy of the [*Mario Kart: Double Dash* ROM](https://romsfun.com/download/mario-kart-double-dash-27533/6)
+- LND or Phoenixd
 
 ## Setup
 
@@ -16,15 +17,24 @@
    
 2. Clone this repo and navigate into the project folder.
 
-3. Set the required environment variables for LND:
+3. Set the required variables in your OS environment for your choice of funding source.
+
+   For LND:
+   - `FUNDING_SOURCE=LND`
    - `GRPC_HOST`: your LND gRPC endpoint (e.g. `localhost:10009`)
    - `ADMIN_MACAROON`: hex-encoded string of your admin macaroon
    - Optionally, put your TLS cert in the root directory as `tls.cert`
+
+   For Phoenixd:
+   - `FUNDING_SOURCE=phoenixd`
+   - `PHOENIXD_HOST_URL`
+   - `PHOENIXD_HTTP_USER`
+   - `PHOENIXD_HTTP_PASSWORD`
   
-4. Start the server:
+5. Start the server:
    ```bash
    python mario.py
    
-5. Open http://localhost:5000 in your browser and switch to full screen.
+6. Open http://localhost:5000 in your browser and switch to full screen.
 
-6. Run the AutoHotKey script, select the game window, and press Ctrl + M to snap it over the UI.
+7. Run the [AutoHotKey](https://www.autohotkey.com/) script, select the game window, and press Ctrl + M to snap it over the UI.
