@@ -238,7 +238,7 @@ if game.funding_source == "phoenixd":
 
             except Exception as error:
                 send_message(f"{player.name}:<br>{error}")
-                return
+                return False
             
             player.sats_earned += amount
 
@@ -259,8 +259,10 @@ if game.funding_source == "phoenixd":
 
             f"Preimage: {preimage}", False)
 
+            return True
+
 # Invoice created: {'recipientAmountSat': 1, 'routingFeeSat': 4, 'paymentId': '2cd3496b-3dda-4fff-af42-677b9164d716', 'paymentHash': 'f740553555b3f55accef371dc3f9d899d7435cbedf4a849661371d2fca4c51c1', 'paymentPreimage': '92c946e4ed03fd60a20e58ae66f5866ee74f25274ce31f92d0a5b575096d013a'}
-            return response.json()
+            # return response.json()
 
         except requests.exceptions.RequestException as error:
             if error.response:
@@ -408,6 +410,13 @@ def pay_player_lnd(player, amount, comment):
     try:
         request = lnrpc.SendRequest(payment_request=invoice)
         data = client.SendPaymentSync(request)
+
+        print(data)
+        
+        error = data.payment_error
+        if error:
+            send_message(f"There was an error paying {player.name}: {error}")
+            return
         
         s = '' if amount < 2 else 's'
         preimage = data.payment_preimage.hex()
@@ -662,13 +671,24 @@ def insert_player(address, name, custom_name):
     player.custom_name = custom_name
     player.lightning_address = address
     if game.funding_source == "lnd":
-        get_callback(player) 
+        get_callback(player)
+    if game.funding_source == "phoenixd":
+        validate_player_phoenixd(player)
     player.sats_earned = 0
 
+def validate_player_phoenixd(player):
+    if player.lightning_address == None:
+        return
+
+    player.is_valid = pay_player_phoenixd(player, 1, "🎮 You're registered to play Mario Kart: Double Sats by D++! 🏎️💨")
+        
 def start_here():
     for player in game.players:
         print(f"{player.name} - {player.lightning_address}")
-        get_callback(player)
+        if game.funding_source == "lnd":
+            get_callback(player)
+        if game.funding_source == "phoenixd":
+            validate_player_phoenixd(player)
 
     if all(player.is_valid == True for player in game.players):
         print("Starting game...")
@@ -676,6 +696,7 @@ def start_here():
     else:
         send_message("Unable to start game due to invalid lightning address(es).")
         game.started = False
+
 
 connected.wait()
 start_here()
