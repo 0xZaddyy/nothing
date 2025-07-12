@@ -91,7 +91,7 @@ class Player:
 
 @dataclass
 class Game:
-    use_phoenixd: bool = True
+    use_phoenixd: bool = False
     offline: bool = False
     payments: bool = True
     started: bool = False # after it's true, don't allow for new registrations
@@ -226,15 +226,40 @@ if game.use_phoenixd:
 
             auth = (os.getenv('PHOENIXD_HTTP_USER'), os.getenv('PHOENIXD_HTTP_PASSWORD'))
 
-            response = requests.post(
-            f"{os.getenv('PHOENIXD_HOST_URL')}/paylnaddress",
-                data=urlencode(data),
-                headers=headers,
-                auth=auth
-            )
+            try:
+                response = requests.post(
+                f"{os.getenv('PHOENIXD_HOST_URL')}/paylnaddress",
+                    data=urlencode(data),
+                    headers=headers,
+                    auth=auth
+                )
+                response.raise_for_status()
+                result = response.json()
 
-            response.raise_for_status()
-            print('Invoice created:', response.json())
+            except Exception as error:
+                send_message(f"{player.name}:<br>{error}")
+                return
+            
+            player.sats_earned += amount
+
+            print(f'Phoenixd payment result: {result}')
+
+            preimage = f"{result['paymentPreimage'][:13]}..{result['paymentPreimage'][-14:]}"
+            amount = result['recipientAmountSat']
+            fee = result['routingFeeSat']
+            send_message(
+            f"Payment successful for {player.name}!<br>"
+
+            # f"Payment Amount: <span class='b'>B</span><font style='font-size:2.5px'> </font>{amount} | "
+            # f"Fee: <span class='b'>B</span><font style='font-size:2.5px'> </font>{fee}<br>"
+
+
+            f"Payment Amount: <span class='b' style='margin-right:3px'>B</span>{amount} | "
+            f"Fee: <span class='b' style='margin-right:3px'>B</span>{fee}<br>"
+
+            f"Preimage: {preimage}", False)
+
+# Invoice created: {'recipientAmountSat': 1, 'routingFeeSat': 4, 'paymentId': '2cd3496b-3dda-4fff-af42-677b9164d716', 'paymentHash': 'f740553555b3f55accef371dc3f9d899d7435cbedf4a849661371d2fca4c51c1', 'paymentPreimage': '92c946e4ed03fd60a20e58ae66f5866ee74f25274ce31f92d0a5b575096d013a'}
             return response.json()
 
         except requests.exceptions.RequestException as error:
@@ -537,8 +562,7 @@ def check_course_reset():
             player.sats_earned = 0
 
 def do_collision(player):
-     # print(f"{player.name} got hit! damage timer:")
-     send_message(f"{player.name} got hit!")
+     send_message(f"{player.name} was hit!")
 
 def check_collision(player):
     # don't check for collisions if the player has already completed the course
@@ -594,7 +618,7 @@ def game_loop(player):
                 if game.use_phoenixd:
                     pay_player_phoenixd(player, game.course_amount, message)
                 else:
-                    pay_player(player, game.course_amount, message) # to do: add player's name if they added it
+                    pay_player_lnd(player, game.course_amount, message) # to do: add player's name if they added it
 
                 game.course_over = True # stop paying players until the next course starts
             else:
@@ -602,7 +626,7 @@ def game_loop(player):
                 if game.use_phoenixd:
                     pay_player_phoenixd(player, game.lap_amount, message)
                 else:
-                    pay_player(player, game.lap_amount, message)
+                    pay_player_lnd(player, game.lap_amount, message)
 
     # stream sats to player in first position
     # phoenixd - got 20 payments in luigi circuit (not including lap and course bonuses, definitely slower...)
@@ -620,14 +644,14 @@ def game_loop(player):
             # btw... the amount here is very much a product of the frequency in which the game loops, this value works for game
             # sleeps .5 seconds between loops and pays every 3rd time (course_timer % 3)
             # but i could change it to actual time to be more accurate
-            message = f"{game.current_course_emoji} You're in first place in {game.current_course}! {game.current_course_emoji_bonus}"
+            message = f"{game.current_course_emoji} You're in first place on {game.current_course}! {game.current_course_emoji_bonus}"
             # can add bitcoin facts for each message - perhaps supplied by 4o??
             # \n works on both ZBD and WoS
             # message += "\n\nDid you know that there are 100 million satoshis per bitcoin?"
             if game.use_phoenixd:
                 pay_player_phoenixd(player, game.stream_amount, message)
             else:
-                pay_player(player, game.stream_amount, message)
+                pay_player_lnd(player, game.stream_amount, message)
             
         else:
             print("game hasn't started yet")
