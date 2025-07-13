@@ -22,7 +22,7 @@
 3. Set the required variables in your OS environment for your choice of funding source.
 
    For LND:
-   - `FUNDING_SOURCE=LND`
+   - `FUNDING_SOURCE=lnd`
    - `GRPC_HOST`: your LND gRPC endpoint (e.g. `localhost:10009`)
    - `ADMIN_MACAROON`: hex-encoded string of your admin macaroon
    - Optionally, put your TLS cert in the root directory as `tls.cert`
