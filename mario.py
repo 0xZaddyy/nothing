@@ -77,6 +77,7 @@ class Player:
     hit_cooldown: int = 0
     # lightning stuff
     sats_earned: int = 0 # per course
+    unpaid_sats: int = 0 # sats that didn't go through due to rate limiting, timeouts, invalid address, etc
     total_sats_earned: int = 0
     lightning_address: str | None = None
     callback: str | None = None
@@ -237,7 +238,9 @@ if game.funding_source == "phoenixd":
                 result = response.json()
 
             except Exception as error:
-                send_message(f"{player.name}:<br>{error}")
+                # to do: add up a total of unpaid sats so that we can pay them when they finish the course
+                player.unpaid_sats = player.unpaid_sats + amount
+                send_message(f"Could not pay {player.name} {amount} sats:<br>{error}")
                 return False
             
             player.sats_earned += amount
@@ -265,6 +268,7 @@ if game.funding_source == "phoenixd":
             # return response.json()
 
         except requests.exceptions.RequestException as error:
+            player.unpaid_sats = player.unpaid_sats + amount
             if error.response:
                 print(error.response.text)
                 return error.response.text
@@ -372,19 +376,23 @@ def send_message(message, print_message=True):
         print(message)
 
 def pay_player(player, amount, comment):
-    if game.funding_source == "lnd":
-        pay_player_lnd(player, amount, comment)
-    if game.funding_source == "phoenixd":
-        pay_player_phoenixd(player, amount, comment)
-
-def pay_player_lnd(player, amount, comment):
     if not game.payments:
         return
     
     if not player.lightning_address:
         send_message(f"{player.name} has not specified a Lightning Address and thus cannot get paid.")
+        player.unpaid_sats = player.unpaid_sats + amount
         return
 
+    total_amount = amount + player.unpaid_sats
+    player.unpaid_sats = 0
+
+    if game.funding_source == "lnd":
+        pay_player_lnd(player, total_amount, comment)
+    if game.funding_source == "phoenixd":
+        pay_player_phoenixd(player, total_amount, comment)
+
+def pay_player_lnd(player, amount, comment):
     player.sats_earned += amount
     amount_msat = amount * 1000 # convert to millisats - danger! be careful here!!!
 
@@ -398,6 +406,7 @@ def pay_player_lnd(player, amount, comment):
 
         if not invoice:
             send_message("There was an issue retrieving the invoice.")
+            player.unpaid_sats = player.unpaid_sats + amount
             return
         
         short_invoice = f"{invoice[:19]}..{invoice[-18:]}"
@@ -405,6 +414,7 @@ def pay_player_lnd(player, amount, comment):
 
     except Exception as error:
         send_message(f"There was an issue retrieving the invoice: {error}")
+        player.unpaid_sats = player.unpaid_sats + amount
         return
   
     try:
@@ -415,6 +425,7 @@ def pay_player_lnd(player, amount, comment):
         
         error = data.payment_error
         if error:
+            player.unpaid_sats = player.unpaid_sats + amount
             send_message(f"There was an error paying {player.name}: {error}")
             return
         
@@ -427,6 +438,7 @@ def pay_player_lnd(player, amount, comment):
         send_message(f"Payment successful for {player.name}!<br>{short_preimage}<br>Amount: <font style='font-size:5px'></font><span class='b'>B</span><font style='font-size:2.5px'> </font>{amount} | Fee: <font style='font-size:2px'> </font><span class='b'>B</span><font style='font-size:2.5px'> </font>{total_fees_msat/1000} | Hops: {num_hops}", False)
         
     except Exception as error:
+        player.unpaid_sats = player.unpaid_sats + amount
         send_message(f"There was an error paying the invoice: {error}")
 
 def read_course():
@@ -630,6 +642,11 @@ def game_loop(player):
             if player.lap == game.current_course_laps: # they completed the course in first place
                 message = f"🥇 {game.current_course} completed! {game.current_course_emoji} You finished in first place! {game.current_course_emoji_bonus}"
                 pay_player(player, game.course_amount, message)
+
+                # pay the other players a consolation prize + unpaid sats in their "mempools"
+                other_players = [p for p in game.players[:game.num_players] if p != player]
+                for other_player in other_players:
+                    pay_player(other_player, 1, "🍌 Better luck next time! Your princess is in another castle. 👸🏰")
 
                 game.course_over = True # stop paying players until the next course starts
             else:
