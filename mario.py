@@ -133,12 +133,7 @@ player1 = Player(
     lightning_timer_memory=0x8037FFC2, # half word
     # item_a_memory=0x80400018,
     # item_b_memory=0x8040001C,
-    # lightning_address="dk@primal.net" # may want to rate limit primal addresses?
-    # lightning_address="therealaustin@primal.net",
-    # lightning_address="dksf@strike.me",
-    # lightning_address="arata@walletofsatoshi.com",
-    # lightning_address="testing3833939@walletofsatoshi.com",
-    # lightning_address="dplusplus@zbd.gg",
+    # you can add a hard coded lightning address for testing
     lightning_address="dplusplus@walletofsatoshi.com",
     # lightning_address="roisin@strike.me",
     # active=False
@@ -149,10 +144,7 @@ player2 = Player(
     position_memory=0x8037FFA7,
     damage_timer_memory=0x8037FF44, # half word
     lightning_timer_memory=0x8037FFC6, # half word
-    # lightning_address="alligator61@coinos.io", # leo
-    # lightning_address="zap@dplus.plus", # maps to WoS
-    # lightning_address="imelonmusk@strike.me",
-    # lightning_address="dplusplus@coinos.io",
+    # you can add a hard coded lightning address for testing
     lightning_address="dplusplus@zbd.gg",
     # active=False
 )
@@ -161,9 +153,7 @@ player3 = Player(
     lap_memory=0x8037FF6A,
     position_memory=0x8037FFAB,
     damage_timer_memory=0x8037FF48, # half word
-    # lightning_address="dplusplus@walletofsatoshi.com",
-    # lightning_address="nouser3408934@strike.me",
-    # lightning_address="dplusplus@strike.me",
+    # lightning_address="me@mydomain.com",
     # active=False
 )
 player4 = Player(
@@ -171,9 +161,7 @@ player4 = Player(
     lap_memory=0x8037FF6E,
     position_memory=0x8037FFAF,
     damage_timer_memory=0x8037FF4C, # half word
-    # lightning_address="nouser3438943@coinos.io",
-    # lightning_address="dplusplus@strike.me",
-    # lightning_address="dplusplus@walletofsatoshi.com",
+    # lightning_address="me@mydomain.com",
     # active=False
 )
 
@@ -238,7 +226,6 @@ if game.funding_source == "phoenixd":
                 result = response.json()
 
             except Exception as error:
-                # to do: add up a total of unpaid sats so that we can pay them when they finish the course
                 player.unpaid_sats = player.unpaid_sats + amount
                 send_message(f"Could not pay {player.name} {amount} sats:<br>{error}")
                 return False
@@ -252,20 +239,11 @@ if game.funding_source == "phoenixd":
             fee = result['routingFeeSat']
             send_message(
             f"Payment successful for {player.name}!<br>"
-
-            # f"Payment Amount: <span class='b'>B</span><font style='font-size:2.5px'> </font>{amount} | "
-            # f"Fee: <span class='b'>B</span><font style='font-size:2.5px'> </font>{fee}<br>"
-
-
             f"Payment Amount: <span class='b' style='margin-right:3px'>B</span>{amount} | "
             f"Fee: <span class='b' style='margin-right:3px'>B</span>{fee}<br>"
-
             f"Preimage: {preimage}", False)
 
             return True
-
-# Invoice created: {'recipientAmountSat': 1, 'routingFeeSat': 4, 'paymentId': '2cd3496b-3dda-4fff-af42-677b9164d716', 'paymentHash': 'f740553555b3f55accef371dc3f9d899d7435cbedf4a849661371d2fca4c51c1', 'paymentPreimage': '92c946e4ed03fd60a20e58ae66f5866ee74f25274ce31f92d0a5b575096d013a'}
-            # return response.json()
 
         except requests.exceptions.RequestException as error:
             player.unpaid_sats = player.unpaid_sats + amount
@@ -635,7 +613,7 @@ def game_loop(player):
         
     new_lap = read_lap(player)
 
-    # todo: could check to see if the game has actually been playing so we don't double pay someone here when the mario.py is reset
+    # to do: check to see if the game has actually been playing so we don't double pay someone here when the mario.py is reset
     if new_lap > player.lap and game.course_timer > 20: # they got a new lap!
         player.lap = new_lap
         if player.position == 1: # they're in first place
@@ -643,7 +621,7 @@ def game_loop(player):
                 message = f"🥇 {game.current_course} completed! {game.current_course_emoji} You finished in first place! {game.current_course_emoji_bonus}"
                 pay_player(player, game.course_amount, message)
 
-                # pay the other players a consolation prize + unpaid sats in their "mempools"
+                # pay the other players a consolation prize + the unpaid sats in their "mempools"
                 other_players = [p for p in game.players[:game.num_players] if p != player]
                 for other_player in other_players:
                     pay_player(other_player, 1, "🍌 Better luck next time! Your princess is in another castle. 👸🏰")
@@ -655,15 +633,6 @@ def game_loop(player):
 
 
     # stream sats to player in first position
-    # phoenixd - got 20 payments in luigi circuit (not including lap and course bonuses, definitely slower...)
-    # will see how it speeds up with the persistent http connection!!
-
-
-    # phoenixd luigi circuit to phoenix wallet - 7 first lap
-    # phoenixd peach beach to wallet of satoshi - 19 first lap (14 second time)
-
-    # expecting about 30 - 33 stream payments (luigi circuit was 30, peach beach 33, dk mountain 33 (including multple falls))
-    # 35 payments with new python code! (152 sats in luigi circuit)
     elif player.position == 1 and game.course_timer % 3 == 0 and game.course_timer > 0: # pay every three cycles
         # it's not a new lap but they're in first so pay them the streaming amount!
         if (game.game_mode == "Grand Prix" and game.course_timer > game.gp_wait_time or game.game_mode == "Vs." and game.course_timer > game.vs_wait_time):
@@ -672,7 +641,7 @@ def game_loop(player):
             # but i could change it to actual time to be more accurate
             message = f"{game.current_course_emoji} You're in first place on {game.current_course}! {game.current_course_emoji_bonus}"
             # can add bitcoin facts for each message - perhaps supplied by 4o??
-            # \n works on both ZBD and WoS
+            # note: \n works on both ZBD and WoS
             # message += "\n\nDid you know that there are 100 million satoshis per bitcoin?"
             pay_player(player, game.stream_amount, message)
             
