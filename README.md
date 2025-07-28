@@ -5,8 +5,8 @@
 **Mario Kart: Double Sats** streams sats in real time based on your performance in *Mario Kart: Double Dash*.
 
 ## Gameplay Examples
-- https://primal.net/e/nevent1qqsgka556y0sc54wxjlzyqgrd6c5g8qyqjskk3x24cn5e0np0y529scl7m27u
-- https://x.com/TYO_BitcoinBase/status/1940076786953711656
+- [Tokyo Bitcoin Base - behind the scenes](]https://primal.net/e/nevent1qqsgka556y0sc54wxjlzyqgrd6c5g8qyqjskk3x24cn5e0np0y529scl7m27u)
+- [Tokyo Bitcoin Base - promo video](https://x.com/TYO_BitcoinBase/status/1940076786953711656)
 
 ## Requirements
 
