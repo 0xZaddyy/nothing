@@ -40,3 +40,5 @@
 6. Open http://localhost:5000 in your browser and switch to full screen.
 
 7. Run the [AutoHotKey](https://www.autohotkey.com/) script, select the game window, and press Ctrl + M to snap it over the UI.
+
+<img src=https://github.com/dplusplus1024/satoshi-speedway/blob/main/screenshot.png>
