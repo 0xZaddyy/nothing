@@ -2,6 +2,9 @@ from flask import Flask, jsonify, send_from_directory
 from dataclasses import dataclass, field
 from websocket_server import WebsocketServer
 import dolphin_memory_engine as dme
+from urllib.parse import urlencode
+from pymongo import MongoClient
+from datetime import datetime
 import requests
 import threading
 import json
@@ -11,7 +14,6 @@ import time
 import os
 import grpc
 import codecs
-from urllib.parse import urlencode
 import lightning_pb2 as lnrpc
 import lightning_pb2_grpc as lightningrpc
 
@@ -63,12 +65,79 @@ cups = [
   "All Cup Tour"
 ]
 
+# ok fam so these are contingent upon which players are battling who!!!
+# player 1 must be mario + luigi, player 2 must be yoshi + birdo!!!!!!!
+timer_addresses = {
+  "Luigi Circuit": {
+    "Grand Prix": {
+      1: {
+        1: 0x8114B6A8
+      },
+      2: {
+        1: 0x81102C78,
+        2: 0x81148B98,
+      }
+    },
+    "Vs.": {
+      2: {
+        1: [0x81100638, 0x81100658], # correct for 'main', 'alt'
+        2: [0x81146558, 0x81146578]  # correct for 'main', 'alt'
+      },
+      3: {
+        1: [0x8110D598, 0x8110D578], # correct for 'main', 'alt'
+        2: [0x811534D8, 0x811534B8], # correct for 'main', 'alt'
+        3: [0x81193E78, 0x81193E58]  # correct for 'main', 'alt'
+      },
+      4: {
+        1: [0x811169D8, 0x811169F8], # correct for 'main', 'alt'
+        2: [0x8115C918, 0x8115C938], # correct for 'main', 'alt'
+        3: [0x8119D2B8, 0x8119D2D8], # correct for 'main', 'alt'
+        4: [0x811DD150, 0x811DD170]  # correct for 'main', 'alt'
+      }
+    }
+  },
+  "Peach Beach": {
+    "Grand Prix": {
+      1: {
+        1: 0x8115B748
+      }
+    },
+    "Vs.": {
+      2: {
+        1: 0x8110A6D8, # correct
+        2: 0x811505F8  # correct
+      },
+      4: {
+        1: 0x81121B78,
+        2: 0x81167A98,
+        3: 0x811A8418,
+        4: 0x811E8290
+      }
+    }
+  },
+  "Baby Park": {
+    "Grand Prix": {
+      1: {
+        1: None
+      }
+    }
+  },
+  "Dry Dry Desert": {
+    "Grand Prix": {
+      1: {
+        1: None
+      }
+    }
+  }
+}
+
 @dataclass
 class Player:
     name: str
     custom_name: str | None = None
     lap: int = 0
     position: int | None = None
+    course_timer: int | None = None
     active: bool = True  # are they playing this round?
     locked: bool = False # do we want to make it so that they can't register for this player slot?
     has_items_a: bool = False
@@ -92,7 +161,10 @@ class Player:
 
 @dataclass
 class Game:
+    # location: str = "Presidio Bitcoin"
+    location: str =  "Bitcoin is for Everyone"
     funding_source: str = os.getenv("FUNDING_SOURCE", "lnd").lower()
+    use_mongo = bool = False
     offline: bool = False
     payments: bool = True
     started: bool = False # after it's true, don't allow for new registrations
@@ -133,9 +205,8 @@ player1 = Player(
     lightning_timer_memory=0x8037FFC2, # half word
     # item_a_memory=0x80400018,
     # item_b_memory=0x8040001C,
-    # you can add a hard coded lightning address for testing
+    # optional: add a hard coded lightning address for testing
     lightning_address="dplusplus@walletofsatoshi.com",
-    # lightning_address="roisin@strike.me",
     # active=False
 )
 player2 = Player(
@@ -144,7 +215,7 @@ player2 = Player(
     position_memory=0x8037FFA7,
     damage_timer_memory=0x8037FF44, # half word
     lightning_timer_memory=0x8037FFC6, # half word
-    # you can add a hard coded lightning address for testing
+    # optional: add a hard coded lightning address for testing
     lightning_address="dplusplus@zbd.gg",
     # active=False
 )
@@ -153,6 +224,7 @@ player3 = Player(
     lap_memory=0x8037FF6A,
     position_memory=0x8037FFAB,
     damage_timer_memory=0x8037FF48, # half word
+    # optional: add a hard coded lightning address for testing
     # lightning_address="me@mydomain.com",
     # active=False
 )
@@ -161,6 +233,7 @@ player4 = Player(
     lap_memory=0x8037FF6E,
     position_memory=0x8037FFAF,
     damage_timer_memory=0x8037FF4C, # half word
+    # optional: add a hard coded lightning address for testing
     # lightning_address="me@mydomain.com",
     # active=False
 )
@@ -198,6 +271,64 @@ if game.funding_source == "lnd":
     lnd_connect()
 # end LND stuff ############################################################
 
+# start auntie jane stuff ##################################################
+if game.funding_source == "auntie_jane":
+    def pay_player_auntie_jane(player, amount, message):
+        try: 
+            address = player.lightning_address
+            url = os.getenv('AUNTIE_JANE_URL')
+            params = {
+                "user": os.getenv('AUNTIE_JANE_USER'),
+                "apiKey": os.getenv('AUNTIE_JANE_APIKEY'),
+                "amount": amount,
+                "message": message,
+                "address": address
+            }
+
+            try:
+                response = requests.get(url, params=params)
+                response.raise_for_status()
+                result = response.json()
+                print(result)
+
+            except Exception as error:
+                player.unpaid_sats = player.unpaid_sats + amount
+                send_message(f"Could not pay {player.name} {amount} sats:<br>{error}")
+                return False
+            
+            player.sats_earned += amount
+
+            print(f'Phoenixd payment result: {result}')
+
+            if ('paymentPreimage' not in result or
+                'recipientAmountSat' not in result or
+                'routingFeeSat' not in result):
+                player.unpaid_sats += amount
+                send_message(
+                    f"Could not pay {player.name} {amount} sats:<br>"
+                    f"Phoenixd returned: {result.get('reason', 'Unknown error')}")
+                return False
+
+            preimage = f"{result['paymentPreimage'][:13]}..{result['paymentPreimage'][-14:]}"
+            amount = result['recipientAmountSat']
+            fee = result['routingFeeSat']
+            send_message(
+                f"Payment successful for {player.name}!<br>"
+                f"Payment Amount: <span class='b' style='margin-right:3px'>B</span>{amount} | "
+                f"Fee: <span class='b' style='margin-right:3px'>B</span>{fee}<br>"
+                f"Preimage: {preimage}", False)
+            return True
+            
+        except Exception as error:
+            player.unpaid_sats = player.unpaid_sats + amount
+            if error.response:
+                print(error.response.text)
+                return False
+            else:
+                print(str(error))
+                return False
+############################################################################
+
 # start phoenixd stuff #####################################################
 if game.funding_source == "phoenixd":
     def pay_player_phoenixd(player, amount, message):
@@ -234,25 +365,33 @@ if game.funding_source == "phoenixd":
 
             print(f'Phoenixd payment result: {result}')
 
+            if ('paymentPreimage' not in result or
+                'recipientAmountSat' not in result or
+                'routingFeeSat' not in result):
+                player.unpaid_sats += amount
+                send_message(
+                    f"Could not pay {player.name} {amount} sats:<br>"
+                    f"Phoenixd returned: {result.get('reason', 'Unknown error')}")
+                return False
+
             preimage = f"{result['paymentPreimage'][:13]}..{result['paymentPreimage'][-14:]}"
             amount = result['recipientAmountSat']
             fee = result['routingFeeSat']
             send_message(
-            f"Payment successful for {player.name}!<br>"
-            f"Payment Amount: <span class='b' style='margin-right:3px'>B</span>{amount} | "
-            f"Fee: <span class='b' style='margin-right:3px'>B</span>{fee}<br>"
-            f"Preimage: {preimage}", False)
-
+                f"Payment successful for {player.name}!<br>"
+                f"Payment Amount: <span class='b' style='margin-right:3px'>B</span>{amount} | "
+                f"Fee: <span class='b' style='margin-right:3px'>B</span>{fee}<br>"
+                f"Preimage: {preimage}", False)
             return True
 
         except requests.exceptions.RequestException as error:
             player.unpaid_sats = player.unpaid_sats + amount
             if error.response:
                 print(error.response.text)
-                return error.response.text
+                return False
             else:
                 print(str(error))
-                return str(error)
+                return False
 # end phoenixd stuff #######################################################
 
 # start websockets stuff ###################################################
@@ -312,7 +451,36 @@ def run_flask():
     app.run(debug=False)
 
 threading.Thread(target=run_flask, daemon=True).start()
-# end flask stuff ###########################################################
+# end Flask stuff ###########################################################
+
+# start MongoDB stuff #######################################################
+MONGODB_USER = os.environ.get('MONGODB_USER')
+MONGODB_PASS = os.environ.get('MONGODB_PASS')
+if MONGODB_USER and MONGODB_PASS:
+    game.use_mongo = True
+    uri = f"mongodb+srv://{MONGODB_USER}:{MONGODB_PASS}@cluster0.3gijhbz.mongodb.net/?retryWrites=true&w=majority"
+    mongo_client = MongoClient(uri)
+    db = mongo_client['Speedway']
+    leaderboard = db['Leaderboard']
+
+    def add_entry(player):
+        check_timers()
+
+        entry = {
+            'name': player.custom_name or "Player",
+            'lightning': player.lightning_address,
+            'course': game.current_course,
+            'location': game.location,
+            'timestamp': player.course_timer,
+            'inserted_at': datetime.utcnow()
+        }
+
+        try:
+            leaderboard.insert_one(entry)
+            send_message(f"✅ Inserted entry for {player.name} at {player.course_timer}")
+        except Exception as e:
+            send_message(f"❌ Insert failed for {player.name} at {player.course_timer}:", e)
+# end MongoDB stuff #########################################################
 
 def get_callback(player):
     if game.offline:
@@ -355,20 +523,22 @@ def send_message(message, print_message=True):
 
 def pay_player(player, amount, comment):
     if not game.payments:
-        return
+        return False
     
     if not player.lightning_address:
         send_message(f"{player.name} has not specified a Lightning Address and thus cannot get paid.")
         player.unpaid_sats = player.unpaid_sats + amount
-        return
+        return False
 
     total_amount = amount + player.unpaid_sats
     player.unpaid_sats = 0
 
     if game.funding_source == "lnd":
-        pay_player_lnd(player, total_amount, comment)
+        return pay_player_lnd(player, total_amount, comment)
     if game.funding_source == "phoenixd":
-        pay_player_phoenixd(player, total_amount, comment)
+        return pay_player_phoenixd(player, total_amount, comment)
+    if game.funding_source == "auntie_jane":
+        return pay_player_auntie_jane(player, total_amount, comment)
 
 def pay_player_lnd(player, amount, comment):
     player.sats_earned += amount
@@ -385,7 +555,7 @@ def pay_player_lnd(player, amount, comment):
         if not invoice:
             send_message("There was an issue retrieving the invoice.")
             player.unpaid_sats = player.unpaid_sats + amount
-            return
+            return False
         
         short_invoice = f"{invoice[:19]}..{invoice[-18:]}"
         send_message(f"Fetched <font style='font-size:2px'> </font><span class='b'>B</span><font style='font-size:2.5px'> </font>{amount} invoice for {player.name}:<br>{short_invoice}")
@@ -393,7 +563,7 @@ def pay_player_lnd(player, amount, comment):
     except Exception as error:
         send_message(f"There was an issue retrieving the invoice: {error}")
         player.unpaid_sats = player.unpaid_sats + amount
-        return
+        return False
   
     try:
         request = lnrpc.SendRequest(payment_request=invoice)
@@ -405,7 +575,7 @@ def pay_player_lnd(player, amount, comment):
         if error:
             player.unpaid_sats = player.unpaid_sats + amount
             send_message(f"There was an error paying {player.name}: {error}")
-            return
+            return False
         
         s = '' if amount < 2 else 's'
         preimage = data.payment_preimage.hex()
@@ -414,10 +584,12 @@ def pay_player_lnd(player, amount, comment):
         num_hops = len(data.payment_route.hops)
 
         send_message(f"Payment successful for {player.name}!<br>{short_preimage}<br>Amount: <font style='font-size:5px'></font><span class='b'>B</span><font style='font-size:2.5px'> </font>{amount} | Fee: <font style='font-size:2px'> </font><span class='b'>B</span><font style='font-size:2.5px'> </font>{total_fees_msat/1000} | Hops: {num_hops}", False)
-        
+        return True
+
     except Exception as error:
         player.unpaid_sats = player.unpaid_sats + amount
         send_message(f"There was an error paying the invoice: {error}")
+        return False
 
 def read_course():
     mode = read_byte(game.game_mode_memory)
@@ -471,7 +643,7 @@ def read_byte(address): # read a single byte
     try:
         result = int.from_bytes(dme.read_bytes(address, 1), "big")
     except Exception as error:
-        print(f"Error reading byte: {error}. Please restart Dolphin.")
+        print(f"Error reading byte: {error}.")
         result = None
     return result
 
@@ -479,7 +651,15 @@ def read_bytes(address): # read half-word (2 bytes)
     try:
         result = int.from_bytes(dme.read_bytes(address, 2), "big")
     except Exception as error:
-        print(f"Error reading bytes: {error}. Please restart Dolphin.")
+        print(f"Error reading bytes: {error}.")
+        result = None
+    return result
+
+def read_word(address): # read word (4 bytes)
+    try:
+        result = int.from_bytes(dme.read_bytes(address, 4), "big")
+    except Exception as error:
+        print(f"Error reading word: {error}.")
         result = None
     return result
 
@@ -555,7 +735,7 @@ def check_course_reset():
     for player in game.players[:game.num_players]:
         player.lap = read_lap(player)
 
-    if all(player.lap == 0 for player in game.players): # there may be edge cases where this will not work for grand prix, because there are more than 4 players... ?
+    if all(player.lap == 0 for player in game.players[:game.num_players]):
         # fresh new course!
         print("NEW COURSE TIME!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         # todo: reset their sat counters here
@@ -564,6 +744,7 @@ def check_course_reset():
         for player in game.players[:game.num_players]:
             player.total_sats_earned += player.sats_earned
             player.sats_earned = 0
+            # want to also think about how to deal with unpaid sats at the end of the game
 
 def do_collision(player):
      send_message(f"{player.name} was hit!")
@@ -596,6 +777,35 @@ def check_collision(player):
     if player.hit_cooldown > 0:
         player.hit_cooldown -= 1
 
+def check_timers():
+    timers = (
+      timer_addresses
+        .get(game.current_course, {})
+        .get(game.game_mode, {})
+        .get(game.num_players)
+    )
+
+    if timers:
+        for player in game.players[:game.num_players]:
+            player.course_timer = None
+            index = game.players.index(player) + 1
+            player_timers = timers.get(index)
+
+            if not player_timers:
+                return
+
+            timer_list = player_timers if isinstance(player_timers, list) else [player_timers]
+            
+            for timer in timer_list:
+                timer_value = read_word(timer)
+                if timer_value < 0 or timer_value > 10_000_000:
+                    continue
+                else:
+                    player.course_timer = timer_value
+    
+    else:
+        for player in game.players[:game.num_players]:
+            player.course_timer = None
 
 def frame_loop():
     while True:
@@ -603,8 +813,16 @@ def frame_loop():
         if game.game_state == "playing" and game.course_over == False and game.started:
             for player in game.players[:game.num_players]:
                 check_collision(player)
+
         time.sleep(0.016)  # ~60 FPS (every frame)
 
+def timer_loop():
+    while True:
+        if game.game_state == "playing" and game.started:
+            check_timers()
+
+        time.sleep(0.5) # check twice per second
+        
 def game_loop(player):
     if game.current_course == "Award Ceremony":
         # don't pay them for the award ceremony
@@ -618,19 +836,52 @@ def game_loop(player):
         player.lap = new_lap
         if player.position == 1: # they're in first place
             if player.lap == game.current_course_laps: # they completed the course in first place
+            # CHANGE THIS!!! TESTING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            # if player.lap == 1: # they completed the course in first place
+                # for these final payments we need to make sure they go through... so put it in a loop and keep trying until it suceeds
                 message = f"🥇 {game.current_course} completed! {game.current_course_emoji} You finished in first place! {game.current_course_emoji_bonus}"
-                pay_player(player, game.course_amount, message)
+                if player.course_timer:
+                    if game.use_mongo:
+                        add_entry(player)
+                    if player.lightning_address and "phoenixwallet.me" in player.lightning_address:
+                        # show a shorter message
+                        message = f"🥇 You finished {game.current_course} in 1st place! ⏱️ Time: {format_time(player.course_timer)}" 
+                    # want to add them to the leaderboard
+                    else:
+                        message = message + f"\n⏱️ Time: {format_time(player.course_timer)}"
+                
+                # if player.lightning_address is not None:
+                payment_attempts = 0
+                base_message = message
+                
+                while not pay_player(player, game.course_amount, message):
+                    if not player.lightning_address:
+                        break
+                    # could remove the following line in the future and add a retry=True flag for the pay_player function
+                    player.unpaid_sats = 0
+                    payment_attempts = payment_attempts + 1
+                    message = base_message + f"\n(Attempt #{payment_attempts + 1})"
+                    print(f"Payment attempt #{payment_attempts} failed.")
+                    time.sleep(2) # wait 2 seconds before we attempt again
+                    continue
 
+                send_message("🥇 Winner was paid!")
+                    
                 # pay the other players a consolation prize + the unpaid sats in their "mempools"
                 other_players = [p for p in game.players[:game.num_players] if p != player]
                 for other_player in other_players:
-                    pay_player(other_player, 1, "🍌 Better luck next time! Your princess is in another castle. 👸🏰")
+                    # could add an entry with no timestamp to save their names, Lightning addresses, and event name
+                    message = "🍌 Better luck next time! Your princess is in another castle. 👸🏰"
+                    if player.lightning_address and "phoenixwallet.me" in player.lightning_address:
+                        # show a shorter message
+                        message = "🍌 Better luck next time! Your princess is in another castle. 🏰"
+                    pay_player(other_player, 1, message)
 
+                send_message("🏎️ Game over. Good game!")
                 game.course_over = True # stop paying players until the next course starts
             else:
                 message = f"Lap {player.lap} complete! {game.current_course_emoji} You're in the lead on {game.current_course} and are now on lap {player.lap + 1}. {game.current_course_emoji_bonus}" # the '&' breaks ZBD
                 pay_player(player, game.lap_amount, message)
-
 
     # stream sats to player in first position
     elif player.position == 1 and game.course_timer % 3 == 0 and game.course_timer > 0: # pay every three cycles
@@ -641,7 +892,7 @@ def game_loop(player):
             # but i could change it to actual time to be more accurate
             message = f"{game.current_course_emoji} You're in first place on {game.current_course}! {game.current_course_emoji_bonus}"
             # can add bitcoin facts for each message - perhaps supplied by 4o??
-            # note: \n works on both ZBD and WoS
+            # note: \n works on ZBD, WoS, Coinos, Strike, Primal, Phoenix, Zeus, and Pushover... 
             # message += "\n\nDid you know that there are 100 million satoshis per bitcoin?"
             pay_player(player, game.stream_amount, message)
             
@@ -661,12 +912,18 @@ def insert_player(address, name, custom_name):
     if game.funding_source == "phoenixd":
         validate_player_phoenixd(player)
     player.sats_earned = 0
+    player.unpaid_sats = 0
 
 def validate_player_phoenixd(player):
     if player.lightning_address == None:
         return
 
-    player.is_valid = pay_player_phoenixd(player, 1, "🎮 You're registered to play Mario Kart: Double Sats by D++! 🏎️💨")
+    message = "🎮 You're registered to play Mario Kart: Double Sats by D++! 🏎️💨"
+    if player.lightning_address and "phoenixwallet.me" in player.lightning_address:
+        # show a shorter message
+        message = "🎮 You're registered to play Mario Kart: Double Sats by D++! 🏎️"
+        
+    player.is_valid = pay_player_phoenixd(player, 1, message)
         
 def start_here():
     for player in game.players:
@@ -683,11 +940,26 @@ def start_here():
         send_message("Unable to start game due to invalid lightning address(es).")
         game.started = False
 
+def format_time(ms):
+    total_seconds = ms // 1000
+    minutes = total_seconds // 60
+    seconds = total_seconds % 60
+    milliseconds = ms % 1000
+
+    padded_minutes = str(minutes).zfill(2)
+    padded_seconds = str(seconds).zfill(2)
+    padded_milliseconds = str(milliseconds).zfill(3)
+
+    return f"{padded_minutes}:{padded_seconds}:{padded_milliseconds}"
+
+#################################################################################################################
 
 connected.wait()
 start_here()
 # place the collision_loop in a separate thread as it checks every frame, much faster than the game_loop
-threading.Thread(target=frame_loop, daemon=True).start() 
+threading.Thread(target=frame_loop, daemon=True).start()
+# place the timer_loop in its own thread, because the game_loop is blocking
+threading.Thread(target=timer_loop, daemon=True).start()
 
 while True:
     read_game_state()
@@ -704,3 +976,5 @@ while True:
         game.course_timer += 1
 
     time.sleep(0.5)
+
+#################################################################################################################
